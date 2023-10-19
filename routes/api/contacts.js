@@ -1,11 +1,13 @@
 import express from "express";
 import Joi from "joi";
+import mongoose from "mongoose";
 import Contact from "../../models/contact.js";
 const router = express.Router();
 const contactSchema = Joi.object({
   name: Joi.string().required(),
   email: Joi.string().email().required(),
   phone: Joi.string().required(),
+  favorite: Joi.boolean(),
 });
 
 export const updateStatusContact = async (contactId, favorite) => {
@@ -26,8 +28,13 @@ router.patch("/:contactId/favorite", async (req, res, next) => {
   const { contactId } = req.params;
   const { favorite } = req.body;
 
-  if (favorite === undefined) {
-    return res.status(400).json({ message: "missing field favorite" });
+  if (
+    favorite === undefined ||
+    (typeof favorite !== "boolean" &&
+      favorite !== "true" &&
+      favorite !== "false")
+  ) {
+    return res.status(400).json({ message: "Invalid favorite value" });
   }
 
   try {
@@ -55,13 +62,15 @@ router.get("/", async (req, res, next) => {
 router.get("/:contactId", async (req, res, next) => {
   try {
     const { contactId } = req.params;
-    const result = await Contact.findById(contactId);
 
-    if (!result) {
+    if (!mongoose.Types.ObjectId.isValid(contactId)) {
       return res.status(404).json({
         message: "Not found",
       });
     }
+
+    const result = await Contact.findById(contactId);
+
     res.json(result);
   } catch (error) {
     res.status(500).json({
@@ -97,17 +106,29 @@ router.post("/", async (req, res, next) => {
 router.delete("/:contactId", async (req, res, next) => {
   const { contactId } = req.params;
 
-  const result = await Contact.findByIdAndRemove(contactId);
-
-  if (!result) {
-    return res.status(404).json({
-      message: "Not found",
+  if (!mongoose.Types.ObjectId.isValid(contactId)) {
+    return res.status(400).json({
+      message: "Invalid contactId format",
     });
   }
 
-  res.status(200).json({
-    message: "Contact deleted",
-  });
+  try {
+    const result = await Contact.findByIdAndRemove(contactId);
+
+    if (!result) {
+      return res.status(404).json({
+        message: "Not found",
+      });
+    }
+
+    res.status(200).json({
+      message: "Contact deleted",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
 });
 
 router.put("/:contactId", async (req, res, next) => {
