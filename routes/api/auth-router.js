@@ -56,7 +56,7 @@ authRouter.post("/login", async (req, res) => {
   });
 });
 
-authRouter.post("/users/logout", authenticateToken, async (req, res) => {
+authRouter.post("/logout", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -72,7 +72,7 @@ authRouter.post("/users/logout", authenticateToken, async (req, res) => {
   }
 });
 
-authRouter.get("/users/current", authenticateToken, (req, res) => {
+authRouter.get("/current", authenticateToken, (req, res) => {
   res.status(200).json({
     email: req.user.email,
     subscription: req.user.subscription,

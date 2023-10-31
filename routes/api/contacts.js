@@ -2,6 +2,7 @@ import express from "express";
 import Joi from "joi";
 import mongoose from "mongoose";
 import Contact from "../../models/contact.js";
+import authenticateToken from "../authenticateToken.js";
 const router = express.Router();
 const contactSchema = Joi.object({
   name: Joi.string().required(),
@@ -53,12 +54,16 @@ router.patch("/:contactId/favorite", async (req, res, next) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
-router.get("/", async (req, res, next) => {
-  const result = await Contact.find();
-  res.json(result);
+router.get("/", authenticateToken, async (req, res, next) => {
+  try {
+    const result = await Contact.find({ owner: req.user._id });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+    });
+  }
 });
-
 router.get("/:contactId", async (req, res, next) => {
   try {
     const { contactId } = req.params;
