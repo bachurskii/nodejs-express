@@ -56,12 +56,10 @@ router.patch("/:contactId/favorite", async (req, res, next) => {
 });
 router.get("/", authenticateToken, async (req, res, next) => {
   try {
-    const result = await Contact.find({ owner: req.user._id });
-    res.json(result);
+    const contacts = await Contact.find({ owner: req.user._id });
+    res.json(contacts);
   } catch (error) {
-    res.status(500).json({
-      message: "Server error",
-    });
+    res.status(500).json({ message: "Server error" });
   }
 });
 router.get("/:contactId", async (req, res, next) => {
@@ -84,7 +82,7 @@ router.get("/:contactId", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", authenticateToken, async (req, res, next) => {
   const body = req.body;
 
   delete body.id;
@@ -97,7 +95,7 @@ router.post("/", async (req, res, next) => {
     });
   }
 
-  const result = await Contact.create(body);
+  const result = await Contact.create({ ...body, owner: req.user._id });
 
   if (!result) {
     return res.status(500).json({
