@@ -11,6 +11,8 @@ import authenticateToken from "../authenticateToken.js";
 const authRouter = express.Router();
 import { userSignUpShema, userSigningShema } from "../../models/users.js";
 import User from "../../models/users.js";
+import { nanoid } from "nanoid";
+import transporter from "../../email.js";
 
 authRouter.post("/register", async (req, res) => {
   const { error } = userSignUpShema.validate(req.body);
@@ -118,7 +120,7 @@ authRouter.patch(
       await fs.rename(filePath, newFilePath);
 
       const avatarURL = `/avatars/${newFileName}`;
-      user.avatarURL = avatarURL;
+      user.avatar = avatarURL;
       await user.save();
 
       res.status(200).json({ avatarURL });
@@ -127,5 +129,80 @@ authRouter.patch(
     }
   }
 );
+
+authRouter.get("/verify/:verificationToken", async (req, res) => {
+  const { verificationToken } = req.params;
+
+  try {
+    const user = await User.findOne({ verificationToken });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.verify) {
+      return res
+        .status(400)
+        .json({ message: "Verification has already been passed" });
+    }
+
+    user.verify = true;
+    user.verificationToken = null;
+    await user.save();
+
+    return res.status(200).json({ message: "Verification successful" });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
+  }
+});
+authRouter.post("/users/verify", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    if (!email) {
+      return res.status(400).json({ message: "Missing required field email" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.verify) {
+      return res
+        .status(400)
+        .json({ message: "Verification has already been passed" });
+    }
+
+    const verificationToken = nanoid();
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    const verificationLink = `http://localhost:3000/api/auth/verify/${verificationToken}`;
+    const mailOptions = {
+      from: "george_n1@meta.ua",
+      to: user.email,
+      subject: "Email Verification",
+      text: `Click on the following link to verify your email: ${verificationLink}`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error("Error sending email:", error);
+        return res.status(500).json({ message: "Error sending email" });
+      } else {
+        console.log("Email sent:", info.response);
+        return res.status(200).json({ message: "Verification email sent" });
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
 
 export default authRouter;
