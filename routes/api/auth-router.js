@@ -12,36 +12,49 @@ const authRouter = express.Router();
 import { userSignUpShema, userSigningShema } from "../../models/users.js";
 import User from "../../models/users.js";
 import { nanoid } from "nanoid";
-import transporter from "../../email.js";
+import sendVerificationEmail from "../../helpers/email.js";
 
 authRouter.post("/register", async (req, res) => {
-  const { error } = userSignUpShema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ message: error.details[0].message });
+  try {
+    const { error } = userSignUpShema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const { email, password } = req.body;
+    const userExists = await User.findOne({ email });
+
+    if (userExists) {
+      return res.status(409).json({ message: "Email already in use" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const avatarURL = gravatar.url(email, { s: "250", r: "pg", d: "mm" });
+
+    const user = new User({
+      email,
+      password: hashedPassword,
+      avatar: avatarURL,
+      verificationToken: nanoid(),
+    });
+
+    await user.save();
+
+    const emailSent = await sendVerificationEmail(user);
+    if (emailSent) {
+      return res.status(200).json({ message: "Verification email sent" });
+    }
+  } catch (error) {
+    console.error(error);
+
+    if (error.message === "SendingEmailFailed") {
+      return res
+        .status(500)
+        .json({ message: "Failed to send verification email" });
+    } else {
+      return res.status(500).json({ message: "Server error" });
+    }
   }
-
-  const { email, password } = req.body;
-  const userExists = await User.findOne({ email });
-  if (userExists) {
-    return res.status(409).json({ message: "Email in use" });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const avatarURL = gravatar.url(email, { s: "250", r: "pg", d: "mm" });
-
-  const user = new User({
-    email,
-    password: hashedPassword,
-    avatar: avatarURL,
-  });
-  await user.save();
-  res.status(201).json({
-    user: {
-      email: user.email,
-      subscription: user.subscription,
-      avatar: user.avatar,
-    },
-  });
 });
 
 authRouter.post("/login", async (req, res) => {
@@ -59,6 +72,7 @@ authRouter.post("/login", async (req, res) => {
     expiresIn: "23h",
   });
   user.token = token;
+  user.verify = true;
   await user.save();
   res.json({
     token,
@@ -134,6 +148,10 @@ authRouter.get("/verify/:verificationToken", async (req, res) => {
   const { verificationToken } = req.params;
 
   try {
+    if (!verificationToken) {
+      return res.status(400).json({ message: "Verification token is missing" });
+    }
+
     const user = await User.findOne({ verificationToken });
 
     if (!user) {
@@ -142,7 +160,7 @@ authRouter.get("/verify/:verificationToken", async (req, res) => {
 
     if (user.verify) {
       return res
-        .status(400)
+        .status(200)
         .json({ message: "Verification has already been passed" });
     }
 
@@ -177,28 +195,6 @@ authRouter.post("/users/verify", async (req, res) => {
         .status(400)
         .json({ message: "Verification has already been passed" });
     }
-
-    const verificationToken = nanoid();
-    user.verificationToken = verificationToken;
-    await user.save();
-
-    const verificationLink = `http://localhost:3000/api/auth/verify/${verificationToken}`;
-    const mailOptions = {
-      from: "george_n1@meta.ua",
-      to: user.email,
-      subject: "Email Verification",
-      text: `Click on the following link to verify your email: ${verificationLink}`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error("Error sending email:", error);
-        return res.status(500).json({ message: "Error sending email" });
-      } else {
-        console.log("Email sent:", info.response);
-        return res.status(200).json({ message: "Verification email sent" });
-      }
-    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Server error" });
