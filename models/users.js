@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-
+import { nanoid } from "nanoid";
 import Joi from "joi";
 
 const emailRegexp = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
@@ -31,6 +31,15 @@ const userShema = new Schema(
     },
     avatarURL: {
       type: String,
+    },
+    verify: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: {
+      type: String,
+      required: [false, "Verify token is required"],
+      default: () => nanoid(),
     },
   },
 
